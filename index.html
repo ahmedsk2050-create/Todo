@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Persistent To-Do List</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f9;
+        }
+        /* Custom Pista Green color for completed tasks */
+        .pista-green-bg {
+            background-color: #d1ffd1; /* Very Light Green */
+        }
+        /* Style for the Floating Action Buttons (FAB) */
+        .fab {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, background-color 0.2s;
+        }
+        .fab:hover {
+            transform: scale(1.05);
+        }
+        .fab:active {
+            transform: scale(0.95);
+        }
+        .task-item {
+            transition: background-color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen antialiased">
+
+    <div id="app" class="max-w-xl mx-auto p-4 md:p-8 pt-10">
+
+        <h1 class="text-4xl font-bold text-gray-800 mb-6 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="mr-3 text-indigo-600">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path d="M9 12l2 2 4-4"></path>
+            </svg>
+            To_Do_List My Tasks
+        </h1>
+        <p class="text-sm text-gray-500 mb-6 italic">Your tasks are saved directly in this browser.</p>
+
+        <div id="main-list-container" class="space-y-3">
+            </div>
+
+        <div id="bin-view" class="hidden">
+            <h2 class="text-3xl font-semibold text-gray-700 mt-10 mb-5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2 text-red-500">
+                    <path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                Recycle Bin
+            </h2>
+            <div id="bin-list-container" class="space-y-3">
+                </div>
+            <button onclick="closeBin()" class="mt-6 w-full py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-colors">
+                Back to Tasks
+            </button>
+        </div>
+
+        <div id="loading-spinner" class="flex justify-center items-center py-10">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-indigo-500"></div>
+        </div>
+    </div>
+
+    <div class="fixed bottom-6 right-6 flex flex-col space-y-4">
+        <button id="bin-fab" class="fab p-4 rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors" title="Open Recycle Bin" onclick="openBin()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+            </svg>
+        </button>
+        <button id="add-fab" class="fab p-4 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition-colors" title="Add New Task" onclick="openTaskModal()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        </button>
+    </div>
+
+    <div id="task-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 z-50 flex items-center justify-center p-4" onclick="closeTaskModal(event)">
+        <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm" onclick="event.stopPropagation()">
+            <h3 id="modal-title" class="text-2xl font-semibold text-gray-800 mb-4">Add New Task</h3>
+            <textarea id="task-input" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition-shadow resize-none" rows="3" placeholder="Enter your task details..."></textarea>
+            <div class="flex justify-end space-x-3 mt-4">
+                <button onclick="closeTaskModal()" class="py-2 px-4 text-gray-600 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors">Cancel</button>
+                <button id="modal-save-btn" onclick="handleSaveTask()" class="py-2 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Store Key
+        const STORAGE_KEY = 'localTodoListTasks';
+
+        // Global state
+        let tasks = [];
+        let isBinView = false;
+        let currentTaskToEdit = null;
+
+        // UI elements
+        const mainListContainer = document.getElementById('main-list-container');
+        const binListContainer = document.getElementById('bin-list-container');
+        const binView = document.getElementById('bin-view');
+        const taskModal = document.getElementById('task-modal');
+        const taskInput = document.getElementById('task-input');
+        const modalTitle = document.getElementById('modal-title');
+        const modalSaveBtn = document.getElementById('modal-save-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const fabContainer = document.querySelector('.fixed.bottom-6.right-6');
+
+        // --- Utility Functions ---
+        
+        /**
+         * Formats a Date object or string into a readable timestamp (e.g., "Nov 2, 9:30 PM").
+         * @param {Date|string|null} date The date object or string to format.
+         * @returns {string} The formatted date string, or an empty string if invalid.
+         */
+        const formatTimestamp = (date) => {
+            if (!date) return '';
+            const d = new Date(date);
+            if (isNaN(d.getTime())) return '';
+            
+            // Using en-US locale for consistent month/day order and 12-hour clock
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric',
+                hour12: true
+            });
+            return formatter.format(d);
+        };
+
+        // --- Local Storage Persistence ---
+
+        const loadTasks = () => {
+            try {
+                const storedTasks = localStorage.getItem(STORAGE_KEY);
+                tasks = storedTasks ? JSON.parse(storedTasks) : [];
+                
+                // Ensure unique IDs, correct data types, and initialize new timestamp fields
+                tasks = tasks.map(t => ({
+                    ...t,
+                    id: t.id || crypto.randomUUID(),
+                    // Convert date strings back to Date objects for proper sorting/formatting
+                    createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+                    updatedAt: t.updatedAt ? new Date(t.updatedAt) : null,
+                    deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,
+                    completed: !!t.completed,
+                    deleted: !!t.deleted
+                }));
+            } catch (error) {
+                console.error("Error loading tasks from localStorage:", error);
+                tasks = [];
+            }
+        };
+
+        const saveTasks = () => {
+            // Sort by createdAt (oldest first) before saving/rendering
+            // Note: The original logic sorts by createdAt. For a typical To-Do list, 
+            // you might prefer sorting uncompleted tasks by createdAt and completed tasks at the bottom.
+            // Keeping the original sort for consistency with the request.
+            tasks.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+            // For localStorage, convert Date objects back to ISO strings
+            const tasksToStore = tasks.map(t => ({
+                ...t,
+                createdAt: t.createdAt.toISOString(),
+                updatedAt: t.updatedAt ? t.updatedAt.toISOString() : null,
+                deletedAt: t.deletedAt ? t.deletedAt.toISOString() : null,
+            }));
+
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasksToStore));
+            } catch (error) {
+                console.error("Error saving tasks to localStorage:", error);
+            }
+            renderApp();
+        };
+
+        // --- CRUD Operations ---
+
+        const addTask = (text) => {
+            const newTask = {
+                id: crypto.randomUUID(),
+                text: text.trim(),
+                completed: false,
+                deleted: false,
+                createdAt: new Date(),
+                updatedAt: null,
+                deletedAt: null,
+            };
+            tasks.push(newTask);
+            saveTasks();
+            closeTaskModal();
+        };
+
+        const updateTask = (id, updates) => {
+            const taskIndex = tasks.findIndex(t => t.id === id);
+            if (taskIndex !== -1) {
+                const task = tasks[taskIndex];
+                
+                // Set update timestamp if the text, completion, or deletion status changed
+                if (updates.text !== undefined || updates.completed !== undefined || updates.deleted !== undefined || updates.deletedAt !== undefined) {
+                    // Do not update 'updatedAt' if the only change is in the bin status (deleted or deletedAt) 
+                    // unless it's a restore operation (where deleted and deletedAt are null)
+                    if (updates.text !== undefined || updates.completed !== undefined || (updates.deleted === false && task.deleted === true)) {
+                        updates.updatedAt = new Date();
+                    }
+                }
+
+                tasks[taskIndex] = { ...task, ...updates };
+                saveTasks();
+            }
+        };
+
+        // Soft delete: moves task to the Bin
+        const softDeleteTask = (id) => {
+            // Set deleted timestamp
+            updateTask(id, { deleted: true, completed: false, deletedAt: new Date(), updatedAt: null }); 
+            // Note: Clear completed status upon deletion, and clear updatedAt for the main list view.
+        };
+
+        // Permanently delete: removes task from the array
+        const permanentlyDeleteTask = (id) => {
+            tasks = tasks.filter(t => t.id !== id);
+            saveTasks();
+        };
+
+        const restoreTask = (id) => {
+            // Clear deletedAt and set updated status
+            updateTask(id, { deleted: false, deletedAt: null });
+        };
+
+        const toggleComplete = (id, currentStatus) => {
+            // This implicitly updates the 'updatedAt' timestamp inside updateTask
+            updateTask(id, { completed: !currentStatus });
+        };
+
+        const editTask = (task) => {
+            currentTaskToEdit = task;
+            openTaskModal(task.text);
+        };
+
+        // --- Modal Handlers ---
+
+        const openTaskModal = (taskText = '') => {
+            taskInput.value = taskText;
+            modalTitle.textContent = currentTaskToEdit ? 'Edit Task' : 'Add New Task';
+            modalSaveBtn.textContent = currentTaskToEdit ? 'Update' : 'Add Task';
+            taskModal.classList.remove('hidden');
+            taskInput.focus();
+        };
+
+        const closeTaskModal = (event) => {
+            // Allow clicking the modal backdrop to close, but not clicks inside the modal content
+            if (event && event.target.id !== 'task-modal') {
+                return;
+            }
+            taskModal.classList.add('hidden');
+            taskInput.value = '';
+            currentTaskToEdit = null;
+        };
+
+        const handleSaveTask = () => {
+            const text = taskInput.value.trim();
+            if (text === '') {
+                // For a real-time app, a simple visual cue is better than console.error
+                taskInput.placeholder = 'Task cannot be empty!';
+                taskInput.classList.add('border-red-500');
+                return;
+            }
+
+            if (currentTaskToEdit) {
+                // Check if text actually changed before updating
+                if (currentTaskToEdit.text.trim() !== text) {
+                    updateTask(currentTaskToEdit.id, { text: text });
+                }
+            } else {
+                // Add
+                addTask(text);
+            }
+            closeTaskModal();
+        };
+        
+        // --- View Toggles ---
+
+        const openBin = () => {
+            isBinView = true;
+            mainListContainer.classList.add('hidden');
+            binView.classList.remove('hidden');
+            document.getElementById('add-fab').classList.add('hidden');
+            document.getElementById('bin-fab').classList.add('hidden');
+            renderApp();
+        };
+
+        const closeBin = () => {
+            isBinView = false;
+            mainListContainer.classList.remove('hidden');
+            binView.classList.add('hidden');
+            document.getElementById('add-fab').classList.remove('hidden');
+            document.getElementById('bin-fab').classList.remove('hidden');
+            renderApp();
+        };
+
+        // --- Rendering Logic ---
+
+        const createActionButton = (iconSvg, colorClass, action, title) => {
+            // This is a common pattern for passing a task object in an onclick handler.
+            // Using a JSON string of the *task ID* is safer and cleaner than the whole object.
+            const escapedAction = action.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+            
+            return `
+                <button onclick="${escapedAction}" title="${title}"
+                    class="p-2 rounded-full ${colorClass} text-white hover:opacity-80 transition-opacity flex-shrink-0">
+                    ${iconSvg}
+                </button>
+            `;
+        };
+
+        const renderTaskItem = (task, index, isBin) => {
+            const isCompleted = task.completed;
+            const bgColor = isCompleted ? 'pista-green-bg' : 'bg-white';
+            const textStyle = isCompleted ? 'line-through text-gray-600' : 'text-gray-800';
+
+            // Icons (Lucide SVGs converted for HTML)
+            const iconEdit = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+            const iconBin = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>`;
+            const iconCheck = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-8.5"></path><path d="M22 4L12 14.01l-3-3"></path></svg>`;
+            const iconRestore = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9 9 0 0 0-6.19 2.76L4 8"></path><path d="M21 21v-4a2 2 0 0 0-2-2H9"></path><path d="M4 12V8h4"></path><path d="M4 12l2.5-2.5"></path></svg>`;
+            const iconPermanentDelete = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>`;
+
+            let actionsHtml = '';
+            let statusDetailsHtml = '';
+
+            if (isBin) {
+                // Actions for Recycle Bin: Restore or Permanent Delete
+                actionsHtml = `
+                    ${createActionButton(iconRestore, 'bg-blue-500', `restoreTask('${task.id}')`, 'Restore')}
+                    ${createActionButton(iconPermanentDelete, 'bg-red-700', `permanentlyDeleteTask('${task.id}')`, 'Permanently Delete')}
+                `;
+                // Show deleted time in the bin
+                const deletedTime = formatTimestamp(task.deletedAt);
+                statusDetailsHtml = `<span class="text-xs text-red-600 font-medium mt-1">Deleted: ${deletedTime}</span>`;
+            } else {
+                // Actions for Main List: Complete, Edit, Soft Delete (to Bin)
+                const completeColor = isCompleted ? 'bg-orange-500' : 'bg-green-600';
+                const completeTitle = isCompleted ? 'Mark Incomplete' : 'Mark Complete';
+                const completeAction = `toggleComplete('${task.id}', ${isCompleted})`;
+
+                // Pass the entire task object safely to editTask
+                const taskJson = JSON.stringify(task).replace(/'/g, '\\\''); // Escape single quotes for use in function call
+                const editAction = `editTask(${taskJson})`;
+
+                actionsHtml = `
+                    ${createActionButton(iconCheck, completeColor, completeAction, completeTitle)}
+                    ${createActionButton(iconEdit, 'bg-indigo-500', editAction, 'Edit Task')}
+                    ${createActionButton(iconBin, 'bg-red-500', `softDeleteTask('${task.id}')`, 'Move to Bin')}
+                `;
+
+                // Show created and updated time in the main list
+                const createdTime = formatTimestamp(task.createdAt);
+                const updatedTime = task.updatedAt ? formatTimestamp(task.updatedAt) : null;
+                
+                statusDetailsHtml = `
+                    <div class="text-xs text-gray-500 mt-1 space-x-2">
+                        <span>Created: ${createdTime}</span>
+                        ${updatedTime ? `<span class="font-semibold text-indigo-500"> | Last Edited: ${updatedTime}</span>` : ''}
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="task-item ${bgColor} p-4 rounded-xl shadow-md flex items-center justify-between border-l-4 ${isCompleted ? 'border-green-600' : 'border-indigo-500'}">
+                    <div class="flex flex-col flex-grow mr-4">
+                        <div class="flex items-start">
+                            <span class="text-lg font-bold w-6 flex-shrink-0 text-center mr-3 ${isCompleted ? 'text-gray-500' : 'text-indigo-600'}">
+                                ${index}.
+                            </span>
+                            <p class="text-lg ${textStyle} break-words flex-grow">
+                                ${task.text}
+                            </p>
+                        </div>
+                        ${statusDetailsHtml}
+                    </div>
+                    <div class="flex space-x-2 flex-shrink-0">
+                        ${actionsHtml}
+                    </div>
+                </div>
+            `;
+        };
+
+        const renderApp = () => {
+            // Hide loading spinner and show FABs once data is loaded/rendered
+            loadingSpinner.classList.add('hidden');
+            fabContainer.classList.remove('hidden');
+            
+            // Re-load and filter tasks every time the app renders to ensure the latest state
+            loadTasks(); 
+
+            // Separate tasks for main list (not deleted) and bin (deleted)
+            const mainTasks = tasks.filter(t => !t.deleted);
+            // Sort main tasks: uncompleted first, then completed. Within each group, sort by createdAt.
+            mainTasks.sort((a, b) => {
+                // If completion status is different, uncompleted comes first
+                if (a.completed !== b.completed) {
+                    return a.completed ? 1 : -1;
+                }
+                // If same status, sort by creation time (oldest first)
+                return a.createdAt.getTime() - b.createdAt.getTime();
+            });
+
+            const binTasks = tasks.filter(t => t.deleted);
+            // Sort bin tasks by deletedAt (most recently deleted first)
+            binTasks.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+
+            if (isBinView) {
+                // Render Bin View
+                binListContainer.innerHTML = binTasks.length === 0
+                    ? '<p class="text-gray-500 italic mt-4 text-center">The Recycle Bin is empty.</p>'
+                    : binTasks.map((task, index) => renderTaskItem(task, index + 1, true)).join('');
+
+            } else {
+                // Render Main View
+                mainListContainer.innerHTML = mainTasks.length === 0
+                    ? '<p class="text-gray-500 italic mt-4 text-center">You have no tasks! Click the \'+\' button to add one.</p>'
+                    : mainTasks.map((task, index) => renderTaskItem(task, index + 1, false)).join('');
+            }
+        };
+
+        // --- Expose functions to global scope for HTML inline handlers ---
+        window.openTaskModal = openTaskModal;
+        window.closeTaskModal = closeTaskModal;
+        window.handleSaveTask = handleSaveTask;
+        window.editTask = editTask;
+        window.toggleComplete = toggleComplete;
+        window.softDeleteTask = softDeleteTask;
+        window.permanentlyDeleteTask = permanentlyDeleteTask;
+        window.restoreTask = restoreTask;
+        window.openBin = openBin;
+        window.closeBin = closeBin;
+
+        // --- Start Application ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+            renderApp();
+        });
+    </script>
+
+</body>
+</html>
